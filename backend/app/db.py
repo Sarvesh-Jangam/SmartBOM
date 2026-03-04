@@ -299,11 +299,23 @@ def ensure_indexes():
         Base.metadata.create_all(bind=engine)
         # Add index on created_at for fast sorting in recent_analyses
         with engine.connect() as conn:
-            conn.execute(text(
-                "CREATE INDEX IF NOT EXISTS idx_analysis_created_at "
-                "ON analysis_results (created_at DESC)"
+            # MySQL doesn't support CREATE INDEX IF NOT EXISTS — check manually
+            result = conn.execute(text(
+                "SELECT COUNT(*) FROM information_schema.statistics "
+                "WHERE table_schema = DATABASE() "
+                "AND table_name = 'analysis_results' "
+                "AND index_name = 'idx_analysis_created_at'"
             ))
-            conn.commit()
+            index_exists = result.scalar() > 0
+            if not index_exists:
+                conn.execute(text(
+                    "CREATE INDEX idx_analysis_created_at "
+                    "ON analysis_results (created_at DESC)"
+                ))
+                conn.commit()
+                print("✅ Index idx_analysis_created_at created")
+            else:
+                print("✅ Index idx_analysis_created_at already exists")
         print("✅ MySQL tables and indexes ensured")
     except SQLAlchemyError as e:
         print(f"⚠️  Warning: {e}")
