@@ -334,21 +334,6 @@ async def upload_boms(file: UploadFile = File(...)):
         print(f"Original BOM columns: {df.columns.tolist()}")
         print(f"BOM Data shape: {df.shape}")
         
-        # [ ]: debug
-        # Temporary debug — remove after fix
-        print(f"Cleaned columns: {df.columns.tolist()}")
-        print(f"Dtypes:\n{df.dtypes}")
-        print(f"First 3 rows:\n{df.head(3)}")
-
-        try:
-            validated_data = validate_bom_data(df)
-            print(f"✅ validate_bom_data succeeded: {len(validated_data)} rows")
-        except Exception as e:
-            import traceback
-            print(f"❌ validate_bom_data FAILED: {str(e)}")
-            traceback.print_exc()
-            raise HTTPException(status_code=400, detail=f"validate_bom_data failed: {str(e)}")
-        # [ ]: debug
         # Validate and clean the data (using bom_utils.validate_bom_data)
         validated_data = validate_bom_data(df)
 
@@ -764,7 +749,6 @@ async def recent_analyses():
         d["_id"] = str(d["_id"])
     return docs
 
-#TODO Copy This
 def save_analysis_to_mongodb(analysis_id: str, analysis_type: str, result: dict):
     """Save analysis result to MongoDB immediately after creation"""
     try:

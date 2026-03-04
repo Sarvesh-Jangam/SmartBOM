@@ -177,24 +177,6 @@ class _AnalysisCollection:
         with SessionLocal() as session:
             obj = session.get(AnalysisResult, record_id)
             return self._to_dict(obj) if obj else None
-    # [ ] debug
-    # def find(self, filter_: dict | None = None) -> _Cursor:
-    #     """
-    #     Called by recent_analyses:
-    #         list(analysis_collection.find().sort("created_at", -1))
-
-    #     Returns a _Cursor so .sort() can be chained before list() conversion.
-    #     """
-    #     with SessionLocal() as session:
-    #         query = session.query(AnalysisResult)
-    #         # Basic equality filtering (extend if needed)
-    #         if filter_:
-    #             for key, value in filter_.items():
-    #                 if hasattr(AnalysisResult, key):
-    #                     query = query.filter(getattr(AnalysisResult, key) == value)
-    #         rows = query.all()
-    #         return _Cursor([self._to_dict(r) for r in rows])
-    # [ ] debug
     
     # In _AnalysisCollection.find() in db.py
     def find(self, filter_: dict | None = None) -> _Cursor:
