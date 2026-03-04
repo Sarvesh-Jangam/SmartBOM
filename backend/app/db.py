@@ -1,6 +1,6 @@
 # db.py
 from sqlalchemy import (
-    create_engine, Column, String, Text, DateTime, Boolean, UniqueConstraint
+    create_engine, Column, String, Text, DateTime, Boolean, UniqueConstraint, text
 )
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.exc import SQLAlchemyError
@@ -41,8 +41,7 @@ class AnalysisResult(Base):
     type       = Column(String(128), nullable=False)
     date       = Column(String(10),  nullable=False)         # "YYYY-MM-DD"
     status     = Column(String(32),  nullable=False, default="completed")
-    # raw = Column(Text(16777215), nullable=True) # BEFORE (MySQL MEDIUMTEXT)
-    raw = Column(Text, nullable=True) # AFTER (PostgreSQL — plain Text is unlimited)
+    raw = Column(Text(16777215), nullable=True) # BEFORE (MySQL MEDIUMTEXT)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -178,24 +177,66 @@ class _AnalysisCollection:
         with SessionLocal() as session:
             obj = session.get(AnalysisResult, record_id)
             return self._to_dict(obj) if obj else None
+    # [ ] debug
+    # def find(self, filter_: dict | None = None) -> _Cursor:
+    #     """
+    #     Called by recent_analyses:
+    #         list(analysis_collection.find().sort("created_at", -1))
 
+    #     Returns a _Cursor so .sort() can be chained before list() conversion.
+    #     """
+    #     with SessionLocal() as session:
+    #         query = session.query(AnalysisResult)
+    #         # Basic equality filtering (extend if needed)
+    #         if filter_:
+    #             for key, value in filter_.items():
+    #                 if hasattr(AnalysisResult, key):
+    #                     query = query.filter(getattr(AnalysisResult, key) == value)
+    #         rows = query.all()
+    #         return _Cursor([self._to_dict(r) for r in rows])
+    # [ ] debug
+    
+    # In _AnalysisCollection.find() in db.py
     def find(self, filter_: dict | None = None) -> _Cursor:
-        """
-        Called by recent_analyses:
-            list(analysis_collection.find().sort("created_at", -1))
-
-        Returns a _Cursor so .sort() can be chained before list() conversion.
-        """
         with SessionLocal() as session:
-            query = session.query(AnalysisResult)
-            # Basic equality filtering (extend if needed)
+            # Only load metadata — skip the heavy 'raw' blob
+            query = session.query(
+                AnalysisResult.id,
+                AnalysisResult.type,
+                AnalysisResult.date,
+                AnalysisResult.status,
+                AnalysisResult.created_at,
+                # raw intentionally excluded here
+            )
             if filter_:
                 for key, value in filter_.items():
                     if hasattr(AnalysisResult, key):
                         query = query.filter(getattr(AnalysisResult, key) == value)
             rows = query.all()
-            return _Cursor([self._to_dict(r) for r in rows])
-
+            return _Cursor([
+                {
+                    "_id":        r.id,
+                    "id":         r.id,
+                    "type":       r.type,
+                    "date":       r.date,
+                    "status":     r.status,
+                    "created_at": r.created_at,
+                    # no 'raw' — frontend only needs metadata for the list
+                }
+                for r in rows
+            ])
+    def delete_one(self, filter_: dict) -> bool:
+        """Returns True if a row was deleted, False if not found"""
+        record_id = filter_.get("id")
+        if not record_id:
+            return False
+        with SessionLocal() as session:
+            obj = session.get(AnalysisResult, record_id)
+            if not obj:
+                return False
+            session.delete(obj)
+            session.commit()
+            return True
 
 # ── _UsersCollection ──────────────────────────────────────────────────────────
 class _UsersCollection:
@@ -272,12 +313,15 @@ users_collection     = _UsersCollection()
 
 # ── Schema creation ───────────────────────────────────────────────────────────
 def ensure_indexes():
-    """
-    Called from FastAPI @app.on_event("startup").
-    Creates all tables if they don't exist yet.
-    """
     try:
         Base.metadata.create_all(bind=engine)
-        print("✅ MySQL tables ensured (analysis_results, users, bom_files)")
+        # Add index on created_at for fast sorting in recent_analyses
+        with engine.connect() as conn:
+            conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS idx_analysis_created_at "
+                "ON analysis_results (created_at DESC)"
+            ))
+            conn.commit()
+        print("✅ MySQL tables and indexes ensured")
     except SQLAlchemyError as e:
-        print(f"⚠️  Warning: could not create MySQL tables: {e}")
+        print(f"⚠️  Warning: {e}")

@@ -333,7 +333,22 @@ async def upload_boms(file: UploadFile = File(...)):
 
         print(f"Original BOM columns: {df.columns.tolist()}")
         print(f"BOM Data shape: {df.shape}")
+        
+        # [ ]: debug
+        # Temporary debug — remove after fix
+        print(f"Cleaned columns: {df.columns.tolist()}")
+        print(f"Dtypes:\n{df.dtypes}")
+        print(f"First 3 rows:\n{df.head(3)}")
 
+        try:
+            validated_data = validate_bom_data(df)
+            print(f"✅ validate_bom_data succeeded: {len(validated_data)} rows")
+        except Exception as e:
+            import traceback
+            print(f"❌ validate_bom_data FAILED: {str(e)}")
+            traceback.print_exc()
+            raise HTTPException(status_code=400, detail=f"validate_bom_data failed: {str(e)}")
+        # [ ]: debug
         # Validate and clean the data (using bom_utils.validate_bom_data)
         validated_data = validate_bom_data(df)
 
@@ -772,6 +787,20 @@ def save_analysis_to_mongodb(analysis_id: str, analysis_type: str, result: dict)
         print(f"❌ Error saving to MongoDB: {str(e)}")
         # don't raise so API still returns results even if Mongo fails
 
+@app.delete("/analysis/{analysis_id}")
+async def delete_analysis(analysis_id: str):
+    """Delete an analysis result by ID"""
+    try:
+        deleted = analysis_collection.delete_one({"id": analysis_id})
+        if not deleted:
+            raise HTTPException(status_code=404, detail="Analysis not found")
+        # Also remove from in-memory store if present
+        analysis_results.pop(analysis_id, None)
+        return {"message": f"Analysis {analysis_id} deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to delete analysis: {str(e)}")
 
 @app.post("/analyze/weldment-pairwise/")
 async def analyze_weldment_pairwise(request: dict):
