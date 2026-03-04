@@ -250,25 +250,151 @@ def generate_file_id():
 # -------------------------
 # File upload endpoints
 # -------------------------
+# @app.post("/upload/weldments/")
+# async def upload_weldments(file: UploadFile = File(...)):
+#     """Upload weldment dimensions file"""
+#     try:
+#         print(f"Processing weldment file: {file.filename}")
+
+#         # Validate file type
+#         if not file.filename.endswith(('.xlsx', '.xls', '.csv')):
+#             raise HTTPException(status_code=400, detail="Only Excel and CSV files are supported")
+
+#         file_path = f"uploads/{file.filename}"
+#         with open(file_path, "wb") as buffer:
+#             content = await file.read()
+#             buffer.write(content)
+
+#         # Read and parse the file
+#         if file.filename.endswith('.csv'):
+#             df = pd.read_csv(file_path)
+#             df.columns = [c for c in df.columns]
+#         else:
+#             df = parse_weldment_excel(file_path)
+
+#         # Validate and clean the data
+#         validated_data = validate_weldment_data(df)
+
+#         # Store the data
+#         file_id = generate_file_id()
+#         weldment_data[file_id] = {
+#             "filename": file.filename,
+#             "data": validated_data.to_dict('records'),
+#             "file_path": file_path,
+#             "columns": validated_data.columns.tolist(),
+#             "record_count": len(validated_data),
+#             "dataframe": validated_data  # Store the actual DataFrame for analysis
+#         }
+
+#         # ── DELETE file from disk after successful processing ──
+#         try:
+#             os.remove(file_path)
+#         except Exception:
+#             pass  # don't fail the request if cleanup fails
+#         # ──────────────────────────────────────────────────────
+
+#         return {
+#             "message": "File uploaded successfully",
+#             "file_id": file_id,
+#             "record_count": len(validated_data),
+#             "columns": validated_data.columns.tolist()
+#         }
+
+#     except Exception as e:
+#         print(f"Error processing weldment file: {str(e)}")
+#         raise HTTPException(status_code=400, detail=f"Error processing file: {str(e)}")
+
+
+# @app.post("/upload/boms/")
+# async def upload_boms(file: UploadFile = File(...)):
+#     """Upload BOM file"""
+#     try:
+#         print(f"Processing BOM file: {file.filename}")
+
+#         # Validate file type
+#         if not file.filename.endswith(('.xlsx', '.xls', '.csv')):
+#             raise HTTPException(status_code=400, detail="Only Excel and CSV files are supported")
+
+#         file_path = f"uploads/{file.filename}"
+#         with open(file_path, "wb") as buffer:
+#             content = await file.read()
+#             buffer.write(content)
+
+#         # Read the file
+#         if file.filename.endswith('.csv'):
+#             df = pd.read_csv(file_path)
+#         else:
+#             try:
+#                 xl = pd.ExcelFile(file_path)
+#                 sheet_names = xl.sheet_names
+#                 print(f"Available sheets: {sheet_names}")
+
+#                 bom_sheets = [name for name in sheet_names if 'bom' in name.lower() or 'assy' in name.lower()]
+#                 if bom_sheets:
+#                     df = pd.read_excel(file_path, sheet_name=bom_sheets[0])
+#                     print(f"Using sheet: {bom_sheets[0]}")
+#                 else:
+#                     df = pd.read_excel(file_path)
+#             except Exception:
+#                 df = pd.read_excel(file_path)
+
+#         print(f"Original BOM columns: {df.columns.tolist()}")
+#         print(f"BOM Data shape: {df.shape}")
+        
+#         # Validate and clean the data (using bom_utils.validate_bom_data)
+#         validated_data = validate_bom_data(df)
+
+#         # Store the data
+#         file_id = generate_file_id()
+#         bom_data[file_id] = {
+#             "filename": file.filename,
+#             "data": validated_data.to_dict('records'),
+#             "file_path": file_path,
+#             "columns": validated_data.columns.tolist(),
+#             "record_count": len(validated_data),
+#             "dataframe": validated_data  # Store the actual DataFrame for analysis
+#         }
+
+#         # ── DELETE file from disk after successful processing ──
+#         try:
+#             os.remove(file_path)
+#         except Exception:
+#             pass  # don't fail the request if cleanup fails
+#         # ──────────────────────────────────────────────────────
+        
+#         return {
+#             "message": "BOM file uploaded successfully",
+#             "file_id": file_id,
+#             "record_count": len(validated_data),
+#             "columns": validated_data.columns.tolist()
+#         }
+
+#     except Exception as e:
+#         print(f"Error processing BOM file: {str(e)}")
+#         raise HTTPException(status_code=400, detail=f"Error processing file: {str(e)}")
+
 @app.post("/upload/weldments/")
 async def upload_weldments(file: UploadFile = File(...)):
     """Upload weldment dimensions file"""
     try:
+        import io
         print(f"Processing weldment file: {file.filename}")
 
         # Validate file type
         if not file.filename.endswith(('.xlsx', '.xls', '.csv')):
             raise HTTPException(status_code=400, detail="Only Excel and CSV files are supported")
 
+        # Read content into memory first
+        content = await file.read()
+
+        # Write to disk temporarily (needed for parse_weldment_excel)
         file_path = f"uploads/{file.filename}"
         with open(file_path, "wb") as buffer:
-            content = await file.read()
             buffer.write(content)
 
         # Read and parse the file
         if file.filename.endswith('.csv'):
-            df = pd.read_csv(file_path)
-            df.columns = [c for c in df.columns]
+            df = pd.read_csv(io.BytesIO(content))
         else:
             df = parse_weldment_excel(file_path)
 
@@ -280,11 +406,18 @@ async def upload_weldments(file: UploadFile = File(...)):
         weldment_data[file_id] = {
             "filename": file.filename,
             "data": validated_data.to_dict('records'),
-            "file_path": file_path,
+            "file_path": None,
             "columns": validated_data.columns.tolist(),
             "record_count": len(validated_data),
-            "dataframe": validated_data  # Store the actual DataFrame for analysis
+            "dataframe": validated_data
         }
+
+        # Delete file now that data is safely in memory
+        try:
+            os.remove(file_path)
+            print(f"🗑️ Deleted uploaded file: {file_path}")
+        except Exception as e:
+            print(f"⚠️ Could not delete file {file_path}: {e}")
 
         return {
             "message": "File uploaded successfully",
@@ -302,39 +435,43 @@ async def upload_weldments(file: UploadFile = File(...)):
 async def upload_boms(file: UploadFile = File(...)):
     """Upload BOM file"""
     try:
+        import io
         print(f"Processing BOM file: {file.filename}")
 
         # Validate file type
         if not file.filename.endswith(('.xlsx', '.xls', '.csv')):
             raise HTTPException(status_code=400, detail="Only Excel and CSV files are supported")
 
+        # Read content into memory first
+        content = await file.read()
+
+        # Write to disk temporarily
         file_path = f"uploads/{file.filename}"
         with open(file_path, "wb") as buffer:
-            content = await file.read()
             buffer.write(content)
 
-        # Read the file
+        # Read the file using BytesIO so no handle stays open on file_path
         if file.filename.endswith('.csv'):
-            df = pd.read_csv(file_path)
+            df = pd.read_csv(io.BytesIO(content))
         else:
             try:
-                xl = pd.ExcelFile(file_path)
+                xl = pd.ExcelFile(io.BytesIO(content))
                 sheet_names = xl.sheet_names
                 print(f"Available sheets: {sheet_names}")
 
                 bom_sheets = [name for name in sheet_names if 'bom' in name.lower() or 'assy' in name.lower()]
                 if bom_sheets:
-                    df = pd.read_excel(file_path, sheet_name=bom_sheets[0])
+                    df = pd.read_excel(io.BytesIO(content), sheet_name=bom_sheets[0])
                     print(f"Using sheet: {bom_sheets[0]}")
                 else:
-                    df = pd.read_excel(file_path)
+                    df = pd.read_excel(io.BytesIO(content))
             except Exception:
-                df = pd.read_excel(file_path)
+                df = pd.read_excel(io.BytesIO(content))
 
         print(f"Original BOM columns: {df.columns.tolist()}")
         print(f"BOM Data shape: {df.shape}")
-        
-        # Validate and clean the data (using bom_utils.validate_bom_data)
+
+        # Validate and clean the data
         validated_data = validate_bom_data(df)
 
         # Store the data
@@ -342,11 +479,18 @@ async def upload_boms(file: UploadFile = File(...)):
         bom_data[file_id] = {
             "filename": file.filename,
             "data": validated_data.to_dict('records'),
-            "file_path": file_path,
+            "file_path": None,
             "columns": validated_data.columns.tolist(),
             "record_count": len(validated_data),
-            "dataframe": validated_data  # Store the actual DataFrame for analysis
+            "dataframe": validated_data
         }
+
+        # Delete file now that data is safely in memory
+        try:
+            os.remove(file_path)
+            print(f"🗑️ Deleted uploaded file: {file_path}")
+        except Exception as e:
+            print(f"⚠️ Could not delete file {file_path}: {e}")
 
         return {
             "message": "BOM file uploaded successfully",
@@ -358,7 +502,6 @@ async def upload_boms(file: UploadFile = File(...)):
     except Exception as e:
         print(f"Error processing BOM file: {str(e)}")
         raise HTTPException(status_code=400, detail=f"Error processing file: {str(e)}")
-
 
 @app.get("/files/weldments/")
 async def get_weldment_files():
