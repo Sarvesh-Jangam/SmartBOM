@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Card, Row, Col, Statistic, Table, Progress, Alert, Button, Spin, Space } from 'antd';
-import { UploadOutlined, ClusterOutlined, BarChartOutlined, RocketOutlined, LogoutOutlined, UserOutlined } from '@ant-design/icons';
+import { Card, Row, Col, Statistic, Table, Progress, Alert, Button, Spin, Space, Popconfirm, message } from 'antd';
+import { UploadOutlined, ClusterOutlined, BarChartOutlined, RocketOutlined, LogoutOutlined, UserOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { getWeldmentFiles, getBOMFiles, getRecentAnalyses } from '../services/api';
+import { getWeldmentFiles, getBOMFiles, getRecentAnalyses,deleteAnalysis } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 
 const Dashboard = () => {
@@ -14,6 +14,7 @@ const Dashboard = () => {
   });
   const [recentAnalyses, setRecentAnalyses] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [deletingId, setDeletingId] = useState(null);
 
   const navigate = useNavigate();
   const { user, logout } = useAuth();   // ⬅ GET USER & LOGOUT
@@ -50,6 +51,20 @@ const Dashboard = () => {
       console.error('Error loading dashboard data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDelete = async (analysisId) => {
+    try {
+      setDeletingId(analysisId);
+      await deleteAnalysis(analysisId);
+      setRecentAnalyses(prev => prev.filter(a => a.id !== analysisId));
+      setStats(prev => ({ ...prev, analyses: prev.analyses - 1 }));
+      message.success('Analysis deleted successfully');
+    } catch (err) {
+      message.error('Failed to delete analysis');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -121,9 +136,29 @@ const Dashboard = () => {
       title: 'Action',
       key: 'action',
       render: (_, record) => (
-        <Button type="link" size="small" onClick={() => navigate(`/previous/${record.id}`)}>
-          View Results
-        </Button>
+        <Space>
+          <Button type="link" size="small" onClick={() => navigate(`/previous/${record.id}`)}>
+            View Results
+          </Button>
+          <Popconfirm
+            title="Delete this analysis?"
+            description="This action cannot be undone."
+            onConfirm={() => handleDelete(record.id)}
+            okText="Delete"
+            okButtonProps={{ danger: true }}
+            cancelText="Cancel"
+          >
+            <Button
+              type="link"
+              danger
+              size="small"
+              icon={<DeleteOutlined />}
+              loading={deletingId === record.id}
+            >
+              Delete
+            </Button>
+          </Popconfirm>
+        </Space>
       ),
     },
   ];
