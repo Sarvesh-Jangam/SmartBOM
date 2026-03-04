@@ -189,4 +189,14 @@ export const calculateBOMSavings = async (formData) => {
   }
 };
 
+export const deleteAnalysis = async (analysisId) => {
+  try {
+    const response = await api.delete(`/analysis/${analysisId}`);
+    return response;
+  } catch (error) {
+    console.error('Delete analysis error:', error);
+    throw error;
+  }
+};
+
 export default api;
