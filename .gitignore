@@ -24,7 +24,7 @@ backend/env/
 backend/.env
 
 # Environment variables
-backend/.env.*
+# backend/.env.*
 backend/*.local
 
 # Distribution / packaging
@@ -75,3 +75,4 @@ frontend/.idea/
 
 .vscode/
 .idea/
+**pycache**
